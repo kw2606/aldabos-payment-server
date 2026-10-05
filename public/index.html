@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة إنشاء روابط الدفع - شركة دبوس</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background-color: #f8fafc; 
+            color: #1e293b; 
+            padding: 25px; 
+            position: relative;
+            min-height: 100vh;
+        }
+
+        /* علامة مائية متكررة خفيفة جداً في خلفية الصفحة */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url('/logo.png');
+            background-repeat: repeat;
+            background-size: 150px 150px;
+            opacity: 0.035;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container { max-width: 920px; margin: 0 auto; position: relative; z-index: 1; }
+        .header { display: flex; align-items: center; gap: 15px; margin-bottom: 22px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(5px); padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; }
+        .header img { width: 65px; height: 65px; object-fit: contain; }
+        .card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(5px); border-radius: 16px; padding: 24px; margin-bottom: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; }
+        h2 { font-size: 1.2rem; margin-bottom: 16px; color: #0f172a; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 12px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 1rem; outline: none; }
+        input:focus { border-color: #2563eb; }
+        .btn { background: #2563eb; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        .btn:hover { background: #1d4ed8; }
+        .result-box { display: none; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 10px; margin-top: 15px; }
+        .result-box input { background: #fff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.92rem; }
+        th, td { padding: 12px; border-bottom: 1px solid #e2e8f0; text-align: right; }
+        th { background: #f1f5f9; color: #475569; font-weight: 600; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: inline-block; }
+        .badge-pending { background: #fef3c7; color: #b45309; }
+        .badge-used { background: #fee2e2; color: #b91c1c; }
+        .copy-btn { background: #059669; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .delete-btn { background: #ef4444; color: #fff; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; }
+        .delete-btn:hover { background: #dc2626; }
+        .actions-col { display: flex; align-items: center; gap: 8px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <img src="/logo.png" alt="Logo" onerror="this.style.display='none'">
+        <div>
+            <h1 style="font-size: 1.3rem;">شركة دبوس لطباعة وتصوير المستندات</h1>
+            <p style="color: #64748b; font-size: 0.9rem;">نظام إصدار ومتابعة روابط الدفع المباشرة</p>
+        </div>
+    </div>
+
+    <!-- نموذج إنشاء الرابط -->
+    <div class="card">
+        <h2>إنشاء رابط دفع جديد</h2>
+        <div class="form-group">
+            <label>رابط الدفع البنكي الأصلي:</label>
+            <input type="text" id="bankUrl" placeholder="https://..." dir="ltr">
+        </div>
+        <div class="form-group">
+            <label>المبلغ المطلوب (بالدينار الكويتي د.ك):</label>
+            <input type="number" id="amount" step="0.05" placeholder="مثال: 5.000">
+        </div>
+        <button class="btn" onclick="generateLink()">إنشاء رابط الفاتورة</button>
+
+        <div id="resultBox" class="result-box">
+            <label style="color:#065f46; font-weight: 600;">تم إنشاء الرابط بنجاح:</label>
+            <div style="display: flex; gap: 8px; margin-top: 6px;">
+                <input type="text" id="generatedUrl" readonly dir="ltr">
+                <button class="copy-btn" onclick="copyLink()">نسخ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- سجل العمليات -->
+    <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h2>سجل الروابط المنشأة</h2>
+            <button class="btn" style="background:#64748b; padding: 6px 14px; font-size:0.85rem;" onclick="loadHistory()">تحديث السجل</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>تاريخ الإنشاء</th>
+                    <th>المبلغ</th>
+                    <th>حالة الاستخدام</th>
+                    <th>الرابط</th>
+                    <th>إجراءات</th>
+                </tr>
+            </thead>
+            <tbody id="historyTable">
+                <tr><td colspan="5" style="text-align:center; color:#94a3b8;">جاري تحميل السجل...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function generateLink() {
+        const url = document.getElementById('bankUrl').value.trim();
+        const amount = document.getElementById('amount').value.trim();
+
+        if (!url || !amount) {
+            alert('يرجى ملء الرابط والمبلغ.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/create-link', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ original_url: url, amount: parseFloat(amount) })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('resultBox').style.display = 'block';
+                document.getElementById('generatedUrl').value = data.payment_url;
+                document.getElementById('bankUrl').value = '';
+                document.getElementById('amount').value = '';
+                loadHistory();
+            } else {
+                alert(data.error || 'حدث خطأ أثناء الإنشاء');
+            }
+        } catch (e) {
+            alert('تعذر الاتصال بالخادم');
+        }
+    }
+
+    function copyLink() {
+        const input = document.getElementById('generatedUrl');
+        input.select();
+        navigator.clipboard.writeText(input.value);
+        alert('تم نسخ الرابط إلى الحافظة!');
+    }
+
+    async function deleteLink(id) {
+        if (!confirm('هل أنت متأكد من رغبتك في حذف هذا الرابط؟ لن يتمكن العميل من الدفع به.')) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/delete/${id}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                loadHistory();
+            } else {
+                alert('فشل الحذف');
+            }
+        } catch (e) {
+            alert('تعذر الاتصال بالخادم');
+        }
+    }
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/history');
+            const result = await res.json();
+            const tbody = document.getElementById('historyTable');
+            tbody.innerHTML = '';
+
+            if (!result.data || result.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد روابط سابقة.</td></tr>';
+                return;
+            }
+
+            result.data.forEach(item => {
+                const tr = document.createElement('tr');
+                const isUsed = item.status === 'used';
+                const statusBadge = isUsed 
+                    ? '<span class="badge badge-used">تم الاستخدام</span>' 
+                    : '<span class="badge badge-pending">جديد / معلق</span>';
+
+                tr.innerHTML = `
+                    <td>${item.created_at}</td>
+                    <td><strong>${Number(item.amount).toFixed(3)} د.ك</strong></td>
+                    <td>${statusBadge}</td>
+                    <td><a href="/pay/${item.id}" target="_blank" style="color:#2563eb; text-decoration:none;">صفحة الدفع</a></td>
+                    <td>
+                        <button class="delete-btn" onclick="deleteLink('${item.id}')">حذف</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    loadHistory();
+</script>
+
+</body>
+</html>
