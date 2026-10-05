@@ -1,5 +1,5 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const { DatabaseSync } = require('node:sqlite');
 const { nanoid } = require('nanoid');
 const cors = require('cors');
 const path = require('path');
@@ -12,25 +12,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// إعداد قاعدة البيانات
-const db = new sqlite3.Database('./database.sqlite', (err) => {
-    if (err) {
-        console.error('خطأ في الاتصال بقاعدة البيانات:', err.message);
-    } else {
-        console.log('تم الاتصال بقاعدة بيانات SQLite بنجاح.');
-    }
-});
-
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS payments (
-        id TEXT PRIMARY KEY,
-        original_url TEXT NOT NULL,
-        amount REAL NOT NULL,
-        status TEXT DEFAULT 'pending',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        used_at DATETIME
-    )`);
-});
+// إنشاء قاعدة البيانات عبر محرك SQLite المدمج داخل Node.js
+const db = new DatabaseSync('./database.sqlite');
+db.exec(`CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    original_url TEXT NOT NULL,
+    amount REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    used_at DATETIME
+)`);
+console.log('تم تشغيل قاعدة بيانات SQLite المدمجة بنجاح.');
 
 // المسار الرئيسي للوحة التحكم
 app.get('/', (req, res) => {
@@ -51,12 +43,9 @@ app.post('/api/create-link', (req, res) => {
     }
 
     const shortId = nanoid(8);
-    const sql = `INSERT INTO payments (id, original_url, amount) VALUES (?, ?, ?)`;
-
-    db.run(sql, [shortId, original_url.trim(), cleanAmount], function (err) {
-        if (err) {
-            return res.status(500).json({ success: false, error: err.message });
-        }
+    try {
+        const stmt = db.prepare('INSERT INTO payments (id, original_url, amount) VALUES (?, ?, ?)');
+        stmt.run(shortId, original_url.trim(), cleanAmount);
 
         const host = req.get('host');
         const protocol = req.protocol;
@@ -68,37 +57,43 @@ app.post('/api/create-link', (req, res) => {
             payment_url: fullPaymentUrl,
             amount: cleanAmount
         });
-    });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // 2. جلب سجل العمليات
 app.get('/api/history', (req, res) => {
-    const sql = `SELECT * FROM payments ORDER BY datetime(created_at) DESC`;
-    db.all(sql, [], (err, rows) => {
-        if (err) {
-            return res.status(500).json({ success: false, error: err.message });
-        }
+    try {
+        const stmt = db.prepare('SELECT * FROM payments ORDER BY datetime(created_at) DESC');
+        const rows = stmt.all();
         res.json({ success: true, data: rows });
-    });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // 3. حذف عملية من السجل
 app.delete('/api/delete/:id', (req, res) => {
     const { id } = req.params;
-    db.run(`DELETE FROM payments WHERE id = ?`, [id], function (err) {
-        if (err) {
-            return res.status(500).json({ success: false, error: err.message });
-        }
+    try {
+        const stmt = db.prepare('DELETE FROM payments WHERE id = ?');
+        stmt.run(id);
         res.json({ success: true, message: 'تم الحذف بنجاح' });
-    });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
-// 4. صفحة الدفع الخاصة بالعميل (مع العلامة المائية الموزعة)
+// 4. صفحة الدفع الخاصة بالعميل (مع العلامة المائية)
 app.get('/pay/:id', (req, res) => {
     const { id } = req.params;
 
-    db.get(`SELECT * FROM payments WHERE id = ?`, [id], (err, row) => {
-        if (err || !row) {
+    try {
+        const stmt = db.prepare('SELECT * FROM payments WHERE id = ?');
+        const row = stmt.get(id);
+
+        if (!row) {
             return res.status(404).send(`
                 <!DOCTYPE html>
                 <html dir="rtl" lang="ar">
@@ -144,18 +139,14 @@ app.get('/pay/:id', (req, res) => {
                     overflow: hidden;
                     z-index: 1;
                 }
-                /* العلامة المائية المكررة والخفيفة */
                 .invoice-card::before {
                     content: "";
                     position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
+                    top: 0; left: 0; right: 0; bottom: 0;
                     background-image: url('/logo.png');
                     background-repeat: repeat;
                     background-size: 130px 130px;
-                    opacity: 0.045; /* باهتة وخفيفة جداً */
+                    opacity: 0.045;
                     pointer-events: none;
                     z-index: -1;
                 }
@@ -298,28 +289,32 @@ app.get('/pay/:id', (req, res) => {
         </body>
         </html>
         `);
-    });
+    } catch (err) {
+        res.status(500).send('خطأ في الخادم');
+    }
 });
 
 // 5. التحويل لرابط البنك وتحديث الحالة
 app.post('/pay/:id/proceed', (req, res) => {
     const { id } = req.params;
 
-    db.get(`SELECT * FROM payments WHERE id = ?`, [id], (err, row) => {
-        if (err || !row) return res.status(404).send('الرابط غير صالح');
+    try {
+        const stmt = db.prepare('SELECT * FROM payments WHERE id = ?');
+        const row = stmt.get(id);
+
+        if (!row) return res.status(404).send('الرابط غير صالح');
 
         if (row.status === 'used') {
             return res.redirect(`/pay/${id}`);
         }
 
-        db.run(
-            `UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [id],
-            () => {
-                res.redirect(row.original_url);
-            }
-        );
-    });
+        const updateStmt = db.prepare("UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?");
+        updateStmt.run(id);
+
+        res.redirect(row.original_url);
+    } catch (err) {
+        res.status(500).send('خطأ أثناء معالجة الطلب');
+    }
 });
 
 app.listen(PORT, () => {
