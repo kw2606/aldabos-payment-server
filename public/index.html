@@ -123,7 +123,6 @@
             background: var(--primary-hover);
         }
 
-        /* نتيجة الرابط المُنشأ */
         .result-box {
             display: none;
             background: #ecfdf5;
@@ -155,7 +154,6 @@
             cursor: pointer;
         }
 
-        /* سجل العمليات */
         .history-title {
             font-size: 1.1rem;
             font-weight: 800;
@@ -228,7 +226,7 @@
             color: #b91c1c;
         }
 
-        /* إشعار عائم صغير ومؤقت (Toast) */
+        /* إشعار منبثق مؤقت (Toast) */
         .toast {
             position: fixed;
             bottom: 30px;
@@ -264,7 +262,7 @@
             <div class="phones">56619683 - 66612278</div>
         </div>
 
-        <!-- نموذج إنشاء رابط -->
+        <!-- إنشاء رابط -->
         <div class="form-card">
             <div class="form-group">
                 <label>رابط الدفع البنكي الأصلي:</label>
@@ -287,11 +285,9 @@
         <div id="historyList">جاري تحميل السجل...</div>
     </div>
 
-    <!-- عنصر الإشعار المنبثق -->
     <div id="toast" class="toast"></div>
 
     <script>
-        // دالة عرض إشعار سريع لمدة ثانيتين فقط دون إيقاف المستخدم
         function showNotification(message) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
@@ -301,7 +297,6 @@
             }, 2000);
         }
 
-        // نسخ الرابط لحافظة الجهاز
         function copyText(text) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(text);
@@ -321,7 +316,6 @@
             copyText(link);
         }
 
-        // إنشاء رابط جديد
         async function generateLink() {
             const urlInput = document.getElementById('originalUrl');
             const amountInput = document.getElementById('amount');
@@ -350,7 +344,6 @@
                     document.getElementById('resultBox').style.display = 'block';
                     document.getElementById('resultLink').innerText = data.payment_url;
                     
-                    // نسخ الرابط الجديد فوراً
                     copyText(data.payment_url);
 
                     urlInput.value = '';
@@ -367,7 +360,6 @@
             }
         }
 
-        // تحميل السجل
         async function loadHistory() {
             const historyList = document.getElementById('historyList');
             try {
@@ -404,11 +396,10 @@
                     `;
                 }).join('');
             } catch (e) {
-                historyList.innerHTML = '<div style="color:red; text-align:center;">تعذر تحميل السجل</div>';
+                // هدوء في حالة فشل مؤقت
             }
         }
 
-        // حذف عملية فوراً دون رسالة تأكيد مزعجة
         async function deleteHistoryItem(id) {
             try {
                 const res = await fetch(`/api/delete/${id}`, { method: 'DELETE' });
@@ -424,7 +415,11 @@
             }
         }
 
-        window.onload = loadHistory;
+        // تشغيل الجلب أول مرة وتكراره كل 3 ثوانٍ تلقائياً
+        window.onload = () => {
+            loadHistory();
+            setInterval(loadHistory, 3000);
+        };
     </script>
 </body>
 </html>
