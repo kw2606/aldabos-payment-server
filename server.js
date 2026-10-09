@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// قاعدة بيانات SQLite المدمجة في Node.js
+// قاعدة بيانات SQLite المدمجة
 const db = new DatabaseSync('./database.sqlite');
 db.exec(`CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
@@ -85,7 +85,7 @@ app.delete('/api/delete/:id', (req, res) => {
     }
 });
 
-// 4. صفحة الفاتورة (تتغير الحالة لمستخدم فور أول فتح!)
+// 4. صفحة الفاتورة للعميل (عرض فقط دون تغيير الحالة لمعاينة الرابط)
 app.get('/pay/:id', (req, res) => {
     const { id } = req.params;
 
@@ -105,14 +105,8 @@ app.get('/pay/:id', (req, res) => {
             `);
         }
 
-        const isAlreadyUsed = row.status === 'used';
+        const isUsed = row.status === 'used';
         const formattedAmount = Number(row.amount).toFixed(3);
-
-        // إذا كانت هذه المرة الأولى لفتح الرابط، نغير حالته فوراً إلى used
-        if (!isAlreadyUsed) {
-            const updateStmt = db.prepare("UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?");
-            updateStmt.run(id);
-        }
 
         res.send(`
         <!DOCTYPE html>
@@ -280,13 +274,15 @@ app.get('/pay/:id', (req, res) => {
                     <div class="price-amount">${formattedAmount} <span class="currency">د.ك</span></div>
                 </div>
 
-                ${isAlreadyUsed ? `
+                ${isUsed ? `
                     <button class="btn-pay btn-disabled" disabled>تم استخدام هذا الرابط مسبقاً</button>
                     <div class="alert-used">
-                        عذراً، هذا الرابط مخصص للاستخدام لمرة واحدة فقط وقد تم فتحه مسبقاً.
+                        عذراً، هذا الرابط مخصص للاستخدام لمرة واحدة فقط وقد تم الانتقال للدفع مسبقاً.
                     </div>
                 ` : `
-                    <a href="${row.original_url}" class="btn-pay">الانتقال للدفع الآن</a>
+                    <form action="/pay/${id}/proceed" method="POST">
+                        <button type="submit" class="btn-pay">الانتقال للدفع الآن</button>
+                    </form>
                     <div class="footer-note">سيتم تحويلك مباشرة إلى بوابة الدفع البنكية الرسمية</div>
                 `}
             </div>
@@ -295,6 +291,30 @@ app.get('/pay/:id', (req, res) => {
         `);
     } catch (err) {
         res.status(500).send('خطأ في الخادم');
+    }
+});
+
+// 5. التحويل الفعلي للبنك وحرق الرابط فور ضغط العميل
+app.post('/pay/:id/proceed', (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const stmt = db.prepare('SELECT * FROM payments WHERE id = ?');
+        const row = stmt.get(id);
+
+        if (!row) return res.status(404).send('الرابط غير صالح');
+
+        if (row.status === 'used') {
+            return res.redirect(`/pay/${id}`);
+        }
+
+        // تحويل الحالة لمستخدم فور الضغط
+        const updateStmt = db.prepare("UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?");
+        updateStmt.run(id);
+
+        res.redirect(row.original_url);
+    } catch (err) {
+        res.status(500).send('خطأ أثناء معالجة الطلب');
     }
 });
 
