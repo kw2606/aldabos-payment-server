@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// إنشاء قاعدة البيانات عبر محرك SQLite المدمج داخل Node.js
+// قاعدة بيانات SQLite المدمجة في Node.js
 const db = new DatabaseSync('./database.sqlite');
 db.exec(`CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
@@ -22,14 +22,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS payments (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     used_at DATETIME
 )`);
-console.log('تم تشغيل قاعدة بيانات SQLite المدمجة بنجاح.');
 
-// المسار الرئيسي للوحة التحكم
+console.log('Database initialized successfully.');
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 1. إنشاء رابط جديد
 app.post('/api/create-link', (req, res) => {
     const { original_url, amount } = req.body;
 
@@ -62,7 +61,6 @@ app.post('/api/create-link', (req, res) => {
     }
 });
 
-// 2. جلب سجل العمليات
 app.get('/api/history', (req, res) => {
     try {
         const stmt = db.prepare('SELECT * FROM payments ORDER BY datetime(created_at) DESC');
@@ -73,7 +71,6 @@ app.get('/api/history', (req, res) => {
     }
 });
 
-// 3. حذف عملية من السجل
 app.delete('/api/delete/:id', (req, res) => {
     const { id } = req.params;
     try {
@@ -85,7 +82,6 @@ app.delete('/api/delete/:id', (req, res) => {
     }
 });
 
-// 4. صفحة الدفع الخاصة بالعميل (مع العلامة المائية)
 app.get('/pay/:id', (req, res) => {
     const { id } = req.params;
 
@@ -294,7 +290,6 @@ app.get('/pay/:id', (req, res) => {
     }
 });
 
-// 5. التحويل لرابط البنك وتحديث الحالة
 app.post('/pay/:id/proceed', (req, res) => {
     const { id } = req.params;
 
