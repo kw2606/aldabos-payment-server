@@ -29,6 +29,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// 1. إنشاء رابط جديد
 app.post('/api/create-link', (req, res) => {
     const { original_url, amount } = req.body;
 
@@ -61,6 +62,7 @@ app.post('/api/create-link', (req, res) => {
     }
 });
 
+// 2. جلب سجل العمليات
 app.get('/api/history', (req, res) => {
     try {
         const stmt = db.prepare('SELECT * FROM payments ORDER BY datetime(created_at) DESC');
@@ -71,6 +73,7 @@ app.get('/api/history', (req, res) => {
     }
 });
 
+// 3. حذف عملية من السجل
 app.delete('/api/delete/:id', (req, res) => {
     const { id } = req.params;
     try {
@@ -82,6 +85,7 @@ app.delete('/api/delete/:id', (req, res) => {
     }
 });
 
+// 4. صفحة الفاتورة (تتغير الحالة لمستخدم فور أول فتح!)
 app.get('/pay/:id', (req, res) => {
     const { id } = req.params;
 
@@ -101,8 +105,14 @@ app.get('/pay/:id', (req, res) => {
             `);
         }
 
-        const isUsed = row.status === 'used';
+        const isAlreadyUsed = row.status === 'used';
         const formattedAmount = Number(row.amount).toFixed(3);
+
+        // إذا كانت هذه المرة الأولى لفتح الرابط، نغير حالته فوراً إلى used
+        if (!isAlreadyUsed) {
+            const updateStmt = db.prepare("UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?");
+            updateStmt.run(id);
+        }
 
         res.send(`
         <!DOCTYPE html>
@@ -270,15 +280,13 @@ app.get('/pay/:id', (req, res) => {
                     <div class="price-amount">${formattedAmount} <span class="currency">د.ك</span></div>
                 </div>
 
-                ${isUsed ? `
+                ${isAlreadyUsed ? `
                     <button class="btn-pay btn-disabled" disabled>تم استخدام هذا الرابط مسبقاً</button>
                     <div class="alert-used">
-                        عذراً، هذا الرابط مخصص للاستخدام لمرة واحدة فقط وقد تم الانتقال للدفع مسبقاً.
+                        عذراً، هذا الرابط مخصص للاستخدام لمرة واحدة فقط وقد تم فتحه مسبقاً.
                     </div>
                 ` : `
-                    <form action="/pay/${id}/proceed" method="POST">
-                        <button type="submit" class="btn-pay">الانتقال للدفع الآن</button>
-                    </form>
+                    <a href="${row.original_url}" class="btn-pay">الانتقال للدفع الآن</a>
                     <div class="footer-note">سيتم تحويلك مباشرة إلى بوابة الدفع البنكية الرسمية</div>
                 `}
             </div>
@@ -287,28 +295,6 @@ app.get('/pay/:id', (req, res) => {
         `);
     } catch (err) {
         res.status(500).send('خطأ في الخادم');
-    }
-});
-
-app.post('/pay/:id/proceed', (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const stmt = db.prepare('SELECT * FROM payments WHERE id = ?');
-        const row = stmt.get(id);
-
-        if (!row) return res.status(404).send('الرابط غير صالح');
-
-        if (row.status === 'used') {
-            return res.redirect(`/pay/${id}`);
-        }
-
-        const updateStmt = db.prepare("UPDATE payments SET status = 'used', used_at = CURRENT_TIMESTAMP WHERE id = ?");
-        updateStmt.run(id);
-
-        res.redirect(row.original_url);
-    } catch (err) {
-        res.status(500).send('خطأ أثناء معالجة الطلب');
     }
 });
 
